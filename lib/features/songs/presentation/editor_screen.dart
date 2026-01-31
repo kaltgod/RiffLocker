@@ -1,0 +1,388 @@
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../config/theme.dart';
+import '../../common/providers/locale_provider.dart';
+import '../data/song_repository.dart';
+
+import '../../songs/domain/song_model.dart'; // Add import
+
+class EditorScreen extends ConsumerStatefulWidget {
+  final Song? song; // Optional song for editing
+  const EditorScreen({super.key, this.song});
+
+  @override
+  ConsumerState<EditorScreen> createState() => _EditorScreenState();
+}
+
+class _EditorScreenState extends ConsumerState<EditorScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _artistController = TextEditingController();
+  final _contentController = TextEditingController();
+  final _keyController = TextEditingController();
+  final _strummingController = TextEditingController();
+
+  PlatformFile? _selectedAudio;
+  bool _isUploading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.song != null) {
+      _titleController.text = widget.song!.title;
+      _artistController.text = widget.song!.artist;
+      _contentController.text = widget.song!.content;
+      _keyController.text = widget.song!.key;
+      if (widget.song!.strummingPattern != null) {
+        _strummingController.text =
+            widget.song!.strummingPattern!['pattern'] ?? '';
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _artistController.dispose();
+    _contentController.dispose();
+    _keyController.dispose();
+    _strummingController.dispose();
+    super.dispose();
+  }
+
+  // ... existing _pickAudio ...
+
+  Future<void> _pickAudio() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'm4a', 'wav'],
+      );
+
+      if (result != null) {
+        setState(() {
+          _selectedAudio = result.files.first;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _saveSong() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_contentController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Content cannot be empty')));
+      return;
+    }
+
+    setState(() => _isUploading = true);
+
+    try {
+      if (widget.song != null) {
+        // Update existing
+        await ref
+            .read(songRepositoryProvider)
+            .updateSong(
+              songId: widget.song!.id,
+              title: _titleController.text,
+              artist: _artistController.text,
+              content: _contentController.text,
+              key: _keyController.text,
+              strummingPattern: _strummingController.text,
+              audioFile: _selectedAudio,
+              currentAudioUrl: widget.song!.audioUrl,
+            );
+        // Refresh detail view if we are coming from it?
+        // Actually global refresh is safer but we might need to invalidate specific provider later.
+      } else {
+        // Create new
+        await ref
+            .read(songRepositoryProvider)
+            .uploadSong(
+              title: _titleController.text,
+              artist: _artistController.text,
+              content: _contentController.text,
+              key: _keyController.text,
+              strummingPattern: _strummingController.text,
+              audioFile: _selectedAudio,
+            );
+      }
+
+      // Refresh list
+      ref.refresh(songsProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.tr('save', ref) + '!')));
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  void _insertText(String text) {
+    final start = _contentController.selection.baseOffset;
+    final end = _contentController.selection.extentOffset;
+
+    if (start < 0) {
+      // No selection, append
+      _contentController.text += text;
+      return;
+    }
+
+    final currentText = _contentController.text;
+    final newText = currentText.replaceRange(start, end, text);
+    _contentController.value = _contentController.value.copyWith(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + text.length),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.song == null
+              ? context.tr('add_song', ref)
+              : context.tr('edit_song', ref),
+        ),
+        actions: [
+          IconButton(
+            icon: _isUploading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save),
+            onPressed: _isUploading ? null : _saveSong,
+          ),
+        ],
+      ),
+      body: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Meta Data Row
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _titleController,
+                            decoration: InputDecoration(
+                              labelText: context.tr('title', ref),
+                              hintText: context.tr('enter_title', ref),
+                            ),
+                            validator: (v) =>
+                                v?.isEmpty == true ? 'Required' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 2,
+                          child: TextFormField(
+                            controller: _artistController,
+                            decoration: InputDecoration(
+                              labelText: context.tr('artist', ref),
+                              hintText: context.tr('enter_artist', ref),
+                            ),
+                            validator: (v) =>
+                                v?.isEmpty == true ? 'Required' : null,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 1,
+                          child: TextFormField(
+                            controller: _keyController,
+                            decoration: InputDecoration(
+                              labelText: context.tr('key', ref),
+                              hintText: context.tr('enter_key', ref),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    TextFormField(
+                      controller: _strummingController,
+                      decoration: InputDecoration(
+                        labelText: context.tr('strumming', ref),
+                        hintText: context.tr('strumming_hint', ref),
+                        prefixIcon: const Icon(Icons.waves, size: 20),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Audio Picker
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.audio_file,
+                            color: _selectedAudio != null
+                                ? AppTheme.secondary
+                                : Colors.grey,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _selectedAudio?.name ??
+                                  context.tr('pick_audio', ref),
+                              style: TextStyle(
+                                color: _selectedAudio != null
+                                    ? Colors.white
+                                    : Colors.white54,
+                                fontStyle: _selectedAudio != null
+                                    ? FontStyle.normal
+                                    : FontStyle.italic,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _pickAudio,
+                            child: Text(context.tr('pick_audio', ref)),
+                          ),
+                          if (_selectedAudio != null)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: AppTheme.error,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _selectedAudio = null),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Toolbar
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _ToolbarButton(
+                            label: '[ ]',
+                            onTap: () => _insertText('[]'),
+                          ),
+                          const SizedBox(width: 8),
+                          _ToolbarButton(
+                            label: '[Am]',
+                            onTap: () => _insertText('[Am]'),
+                          ),
+                          const SizedBox(width: 8),
+                          _ToolbarButton(
+                            label: '[C]',
+                            onTap: () => _insertText('[C]'),
+                          ),
+                          const SizedBox(width: 8),
+                          _ToolbarButton(
+                            label: '[G]',
+                            onTap: () => _insertText('[G]'),
+                          ),
+                          const SizedBox(width: 8),
+                          _ToolbarButton(
+                            label: '[Em]',
+                            onTap: () => _insertText('[Em]'),
+                          ),
+                          const SizedBox(width: 8),
+                          _ToolbarButton(
+                            label: '[D]',
+                            onTap: () => _insertText('[D]'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    // Main Content Editor
+                    TextFormField(
+                      controller: _contentController,
+                      maxLines: null, // Grows
+                      minLines: 15,
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 16,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: context.tr('lyrics_hint', ref),
+                        alignLabelWithHint: true,
+                        labelText: context.tr('lyrics_chords', ref),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolbarButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _ToolbarButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.primary,
+            fontWeight: FontWeight.bold,
+            fontFamily: 'monospace',
+          ),
+        ),
+      ),
+    );
+  }
+}
