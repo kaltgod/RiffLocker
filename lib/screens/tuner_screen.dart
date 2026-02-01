@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../config/theme.dart';
 import '../../features/common/providers/locale_provider.dart';
 import '../../features/home/presentation/widgets/main_drawer.dart';
 import '../../services/audio/tuner_service.dart';
@@ -51,7 +52,7 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
         appBar: AppBar(
           leading: Builder(
             builder: (context) => IconButton(
-              icon: const Icon(Icons.menu),
+              icon: const Icon(Icons.menu_rounded),
               tooltip: context.tr('menu_tooltip', ref),
               onPressed: () => Scaffold.of(context).openDrawer(),
             ),
@@ -60,9 +61,19 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           bottom: TabBar(
-            indicatorColor: Colors.amber, // Yellow indicator
-            labelColor: Colors.amber, // Active color (yellow-ish)
-            unselectedLabelColor: Colors.grey,
+            indicatorColor: AppTheme.primary,
+            indicatorWeight: 3,
+            indicatorPadding: const EdgeInsets.symmetric(horizontal: 24),
+            labelColor: AppTheme.primary,
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+            ),
+            unselectedLabelColor: Colors.white54,
+            unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 15,
+            ),
             tabs: [
               Tab(text: context.tr('mode_precision', ref)),
               Tab(text: context.tr('mode_auto', ref)),

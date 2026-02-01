@@ -11,17 +11,56 @@ class AuthScreen extends ConsumerStatefulWidget {
   ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends ConsumerState<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen>
+    with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   bool _isLoading = false;
-  // If true, show Sign Up; if false, show Sign In
   bool _isSignUp = false;
+
+  late AnimationController _animController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+      ),
+    );
+
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.1), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animController,
+            curve: const Interval(0.2, 0.8, curve: Curves.easeOutCubic),
+          ),
+        );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animController,
+        curve: const Interval(0.0, 0.5, curve: Curves.easeOutBack),
+      ),
+    );
+
+    _animController.forward();
+  }
 
   @override
   void dispose() {
+    _animController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -94,113 +133,184 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Logo or Title
-              Icon(Icons.lock_open, size: 64, color: AppTheme.primary),
-              const SizedBox(height: 16),
-              Text(
-                context.tr('app_title', ref),
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.primary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _isSignUp
-                    ? context.tr('create_account', ref)
-                    : context.tr('welcome_back', ref),
-                textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(color: Colors.white70),
-              ),
-              const SizedBox(height: 32),
-
-              // Email/Pass Form
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: context.tr('email', ref),
-                        prefixIcon: const Icon(Icons.email_outlined),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppTheme.background, AppTheme.surface.withOpacity(0.5)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(28.0),
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Animated Logo
+                      ScaleTransition(
+                        scale: _scaleAnimation,
+                        child: Image.asset('logo.png', width: 120, height: 120),
                       ),
-                      validator: (val) {
-                        if (val == null || val.isEmpty)
-                          return context.tr('required_field', ref);
-                        if (!val.contains('@'))
-                          return context.tr('invalid_email', ref);
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: context.tr('password', ref),
-                        prefixIcon: const Icon(Icons.lock_outline),
-                      ),
-                      validator: (val) {
-                        if (val == null || val.isEmpty)
-                          return context.tr('required_field', ref);
-                        if (val.length < 6)
-                          return context.tr('password_min_length', ref);
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-              // Main Action Button
-              ElevatedButton(
-                onPressed: _isLoading
-                    ? null
-                    : (_isSignUp ? _signUpWithEmail : _signInWithEmail),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.black,
+                      // Title
+                      Text(
+                        context.tr('app_title', ref),
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primary,
+                              letterSpacing: 1,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Subtitle with animation
+                      AnimatedSwitcher(
+                        duration: AppTheme.animNormal,
+                        child: Text(
+                          _isSignUp
+                              ? context.tr('create_account', ref)
+                              : context.tr('welcome_back', ref),
+                          key: ValueKey(_isSignUp),
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(color: Colors.white60),
                         ),
-                      )
-                    : Text(
-                        _isSignUp
-                            ? context.tr('sign_up', ref)
-                            : context.tr('sign_in', ref),
                       ),
-              ),
+                      const SizedBox(height: 40),
 
-              const SizedBox(height: 16),
+                      // Form Card
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: AppTheme.cardDecoration,
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            children: [
+                              // Email Field
+                              TextFormField(
+                                controller: _emailController,
+                                keyboardType: TextInputType.emailAddress,
+                                style: const TextStyle(fontSize: 16),
+                                decoration: InputDecoration(
+                                  labelText: context.tr('email', ref),
+                                  prefixIcon: const Icon(
+                                    Icons.email_outlined,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                                validator: (val) {
+                                  if (val == null || val.isEmpty) {
+                                    return context.tr('required_field', ref);
+                                  }
+                                  if (!val.contains('@')) {
+                                    return context.tr('invalid_email', ref);
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 20),
 
-              // Toggle Sign Up / Sign In
-              TextButton(
-                onPressed: () => setState(() => _isSignUp = !_isSignUp),
-                child: Text(
-                  _isSignUp
-                      ? context.tr('already_have_account', ref)
-                      : context.tr('dont_have_account', ref),
+                              // Password Field
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: true,
+                                style: const TextStyle(fontSize: 16),
+                                decoration: InputDecoration(
+                                  labelText: context.tr('password', ref),
+                                  prefixIcon: const Icon(
+                                    Icons.lock_outline_rounded,
+                                    color: AppTheme.primary,
+                                  ),
+                                ),
+                                validator: (val) {
+                                  if (val == null || val.isEmpty) {
+                                    return context.tr('required_field', ref);
+                                  }
+                                  if (val.length < 6) {
+                                    return context.tr(
+                                      'password_min_length',
+                                      ref,
+                                    );
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+
+                      // Main Action Button with animation
+                      AnimatedContainer(
+                        duration: AppTheme.animNormal,
+                        curve: AppTheme.animCurve,
+                        child: ElevatedButton(
+                          onPressed: _isLoading
+                              ? null
+                              : (_isSignUp
+                                    ? _signUpWithEmail
+                                    : _signInWithEmail),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 18),
+                            disabledBackgroundColor: AppTheme.primary
+                                .withOpacity(0.6),
+                          ),
+                          child: AnimatedSwitcher(
+                            duration: AppTheme.animFast,
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.black,
+                                    ),
+                                  )
+                                : Text(
+                                    _isSignUp
+                                        ? context.tr('sign_up', ref)
+                                        : context.tr('sign_in', ref),
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Toggle Sign Up / Sign In
+                      TextButton(
+                        onPressed: () => setState(() => _isSignUp = !_isSignUp),
+                        child: AnimatedSwitcher(
+                          duration: AppTheme.animNormal,
+                          child: Text(
+                            _isSignUp
+                                ? context.tr('already_have_account', ref)
+                                : context.tr('dont_have_account', ref),
+                            key: ValueKey('toggle_$_isSignUp'),
+                            style: const TextStyle(fontSize: 15),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

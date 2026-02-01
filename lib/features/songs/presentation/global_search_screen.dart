@@ -110,7 +110,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
+            icon: const Icon(Icons.menu_rounded),
             tooltip: context.tr('menu_tooltip', ref),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
@@ -122,7 +122,7 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
             hintText: context.tr('search_songs', ref),
             border: InputBorder.none,
             suffixIcon: IconButton(
-              icon: const Icon(Icons.search),
+              icon: const Icon(Icons.search_rounded),
               onPressed: _search,
             ),
           ),
@@ -130,7 +130,9 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(color: AppTheme.primary),
+            )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: _results.length,
@@ -157,29 +159,10 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
 
                 final shouldShowAdd = !isAlreadyAdded && !isMySong;
 
-                return Card(
-                  child: ListTile(
-                    title: Text(
-                      song.title,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      '${song.artist} • ${context.tr('key', ref)}: ${song.key}',
-                    ),
-                    onTap: () {
-                      context.push('/song', extra: song);
-                    },
-                    trailing: shouldShowAdd
-                        ? IconButton(
-                            icon: const Icon(
-                              Icons.add_circle_outline,
-                              color: AppTheme.primary,
-                            ),
-                            onPressed: () => _cloneSong(song),
-                            tooltip: context.tr('add_to_library_tooltip', ref),
-                          )
-                        : const Icon(Icons.check, color: Colors.green),
-                  ),
+                return _PremiumSearchCard(
+                  song: song,
+                  showAdd: shouldShowAdd,
+                  onAdd: () => _cloneSong(song),
                 );
               },
             ),
@@ -205,6 +188,160 @@ class _CategoryOption extends StatelessWidget {
       leading: Icon(icon, color: AppTheme.primary),
       title: Text(label),
       onTap: onTap,
+    );
+  }
+}
+
+class _PremiumSearchCard extends ConsumerStatefulWidget {
+  final Song song;
+  final bool showAdd;
+  final VoidCallback onAdd;
+
+  const _PremiumSearchCard({
+    required this.song,
+    required this.showAdd,
+    required this.onAdd,
+  });
+
+  @override
+  ConsumerState<_PremiumSearchCard> createState() => _PremiumSearchCardState();
+}
+
+class _PremiumSearchCardState extends ConsumerState<_PremiumSearchCard> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: () => context.push('/song', extra: widget.song),
+      child: AnimatedContainer(
+        duration: AppTheme.animFast,
+        curve: AppTheme.animCurve,
+        margin: const EdgeInsets.only(bottom: 12),
+        transform: Matrix4.identity()..scale(_isPressed ? 0.98 : 1.0),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceLight,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+          border: Border.all(
+            color: Colors.white.withOpacity(_isPressed ? 0.15 : 0.08),
+          ),
+          boxShadow: _isPressed ? [] : AppTheme.subtleShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppTheme.secondary.withOpacity(0.2),
+                    AppTheme.primary.withOpacity(0.1),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+              ),
+              child: const Icon(
+                Icons.library_music_rounded,
+                color: AppTheme.secondary,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.song.title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.song.artist,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.6),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (widget.song.key.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                ),
+                child: Text(
+                  widget.song.key,
+                  style: const TextStyle(
+                    color: AppTheme.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 12),
+            widget.showAdd
+                ? _AddButton(onPressed: widget.onAdd)
+                : const Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.green,
+                    size: 28,
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddButton extends StatefulWidget {
+  final VoidCallback onPressed;
+
+  const _AddButton({required this.onPressed});
+
+  @override
+  State<_AddButton> createState() => _AddButtonState();
+}
+
+class _AddButtonState extends State<_AddButton> {
+  bool _isPressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: widget.onPressed,
+      child: AnimatedContainer(
+        duration: AppTheme.animFast,
+        curve: AppTheme.animCurve,
+        transform: Matrix4.identity()..scale(_isPressed ? 0.88 : 1.0),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: _isPressed
+              ? AppTheme.primary.withOpacity(0.2)
+              : AppTheme.primary.withOpacity(0.1),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.add_rounded, color: AppTheme.primary, size: 24),
+      ),
     );
   }
 }

@@ -66,47 +66,49 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(context.tr('change_password', ref)),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _currentPasswordController,
-              decoration: InputDecoration(
-                labelText: context.tr('enter_current_password', ref),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _currentPasswordController,
+                decoration: InputDecoration(
+                  labelText: context.tr('enter_current_password', ref),
+                ),
+                obscureText: true,
+                validator: (value) => value != null && value.isNotEmpty
+                    ? null
+                    : context.tr('required_field', ref),
               ),
-              obscureText: true,
-              validator: (value) => value != null && value.isNotEmpty
-                  ? null
-                  : context.tr('required_field', ref),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _passwordController,
-              decoration: InputDecoration(
-                labelText: context.tr('new_password', ref),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _passwordController,
+                decoration: InputDecoration(
+                  labelText: context.tr('new_password', ref),
+                ),
+                obscureText: true,
+                validator: (value) => value != null && value.length >= 6
+                    ? null
+                    : context.tr('password_min_length', ref),
               ),
-              obscureText: true,
-              validator: (value) => value != null && value.length >= 6
-                  ? null
-                  : context.tr('password_min_length', ref),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _confirmController,
-              decoration: InputDecoration(
-                labelText: context.tr('confirm_password', ref),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _confirmController,
+                decoration: InputDecoration(
+                  labelText: context.tr('confirm_password', ref),
+                ),
+                obscureText: true,
+                validator: (value) {
+                  if (value != _passwordController.text) {
+                    return context.tr('password_mismatch', ref);
+                  }
+                  return null;
+                },
               ),
-              obscureText: true,
-              validator: (value) {
-                if (value != _passwordController.text) {
-                  return context.tr('password_mismatch', ref);
-                }
-                return null;
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       actions: [

@@ -172,7 +172,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.save),
+                : const Icon(Icons.save_rounded),
             onPressed: _isUploading ? null : _saveSong,
           ),
         ],
@@ -245,13 +245,15 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: AppTheme.surface,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusMedium,
+                        ),
                         border: Border.all(color: Colors.white10),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            Icons.audio_file,
+                            Icons.audio_file_rounded,
                             color: _selectedAudio != null
                                 ? AppTheme.secondary
                                 : Colors.grey,
@@ -349,31 +351,47 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   }
 }
 
-class _ToolbarButton extends StatelessWidget {
+class _ToolbarButton extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
 
   const _ToolbarButton({required this.label, required this.onTap});
 
   @override
+  State<_ToolbarButton> createState() => _ToolbarButtonState();
+}
+
+class _ToolbarButtonState extends State<_ToolbarButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _isPressed = true),
+      onTapUp: (_) => setState(() => _isPressed = false),
+      onTapCancel: () => setState(() => _isPressed = false),
+      onTap: widget.onTap,
+      child: AnimatedContainer(
+        duration: AppTheme.animFast,
+        curve: AppTheme.animCurve,
+        transform: Matrix4.identity()..scale(_isPressed ? 0.92 : 1.0),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(4),
+          color: _isPressed
+              ? AppTheme.primary.withOpacity(0.2)
+              : AppTheme.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
           border: Border.all(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+            color: AppTheme.primary.withOpacity(_isPressed ? 0.5 : 0.3),
           ),
         ),
         child: Text(
-          label,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.primary,
-            fontWeight: FontWeight.bold,
+          widget.label,
+          style: const TextStyle(
+            color: AppTheme.primary,
+            fontWeight: FontWeight.w600,
             fontFamily: 'monospace',
+            fontSize: 14,
           ),
         ),
       ),
