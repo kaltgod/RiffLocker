@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../config/theme.dart';
+import 'chord_transposer.dart';
 
 class ChordLyricsRenderer extends StatelessWidget {
   final String content;
   final TextStyle? lyricStyle;
   final TextStyle? chordStyle;
+  final int transpose;
 
   const ChordLyricsRenderer({
     super.key,
     required this.content,
     this.lyricStyle,
     this.chordStyle,
+    this.transpose = 0,
   });
 
   @override
@@ -64,12 +67,18 @@ class ChordLyricsRenderer extends StatelessWidget {
       height: 1.1,
     );
 
+    // Apply transposition to chord
+    String? displayChord = cw.chord;
+    if (displayChord != null && transpose != 0) {
+      displayChord = ChordTransposer.transpose(displayChord, transpose);
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Chord Line
-        Text(cw.chord ?? '', style: chordStyle ?? defaultChordStyle),
+        Text(displayChord ?? '', style: chordStyle ?? defaultChordStyle),
         // Lyric Line
         Text(
           // If lyric is empty but chord exists, usually means a chord at end of line

@@ -50,10 +50,43 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
   }
 
   Future<void> _cloneSong(Song song) async {
+    // Show category selection dialog
+    final category = await showDialog<SongCategory>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('select_category', ref)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CategoryOption(
+              label: context.tr('want_to_learn', ref),
+              icon: Icons.lightbulb_outline,
+              onTap: () => Navigator.pop(context, SongCategory.wantToLearn),
+            ),
+            _CategoryOption(
+              label: context.tr('learning', ref),
+              icon: Icons.school_outlined,
+              onTap: () => Navigator.pop(context, SongCategory.learning),
+            ),
+            _CategoryOption(
+              label: context.tr('know', ref),
+              icon: Icons.check_circle_outline,
+              onTap: () => Navigator.pop(context, SongCategory.know),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (category == null) return; // User cancelled
+
     try {
-      await ref.read(songRepositoryProvider).duplicateSong(song);
+      await ref
+          .read(songRepositoryProvider)
+          .duplicateSong(song, category: category);
 
       // Refresh my list
+      // ignore: unused_result
       ref.refresh(songsProvider);
 
       if (mounted) {
@@ -150,6 +183,28 @@ class _GlobalSearchScreenState extends ConsumerState<GlobalSearchScreen> {
                 );
               },
             ),
+    );
+  }
+}
+
+/// Option widget for category selection dialog
+class _CategoryOption extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _CategoryOption({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: AppTheme.primary),
+      title: Text(label),
+      onTap: onTap,
     );
   }
 }

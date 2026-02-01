@@ -38,6 +38,7 @@ class SongRepository {
     required String key,
     required String? strummingPattern,
     required PlatformFile? audioFile,
+    SongCategory category = SongCategory.wantToLearn,
   }) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('User not logged in');
@@ -112,6 +113,7 @@ class SongRepository {
       'key': song.key,
       'strumming_pattern': song.strummingPattern,
       'audio_url': song.audioUrl,
+      'category': category.value,
     });
   }
 
@@ -222,7 +224,10 @@ class SongRepository {
     return data.map((json) => Song.fromJson(json)).toList();
   }
 
-  Future<void> duplicateSong(Song original) async {
+  Future<void> duplicateSong(
+    Song original, {
+    SongCategory category = SongCategory.wantToLearn,
+  }) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) throw Exception('Must be logged in to clone songs');
 
@@ -256,7 +261,20 @@ class SongRepository {
       'audio_url':
           original.audioUrl, // Copy the reference (it's public read now)
       'original_song_id': original.id, // Mark as a clone
+      'category': category.value,
     });
+  }
+
+  /// Update song category
+  Future<void> updateSongCategory(String songId, SongCategory category) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('User not logged in');
+
+    await _supabase
+        .from('songs')
+        .update({'category': category.value})
+        .eq('id', songId)
+        .eq('user_id', userId);
   }
 
   Future<void> deleteSong(String songId) async {

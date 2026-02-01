@@ -11,6 +11,7 @@ import 'features/songs/domain/song_model.dart';
 import 'features/auth/providers.dart';
 import 'features/auth/presentation/profile_screen.dart';
 import 'features/songs/presentation/global_search_screen.dart';
+import 'screens/tuner_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // Watch auth state but only rebuild if the session status changes (Login/Logout).
@@ -32,6 +33,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/search',
         builder: (context, state) => const GlobalSearchScreen(),
       ),
+      GoRoute(path: '/tuner', builder: (context, state) => const TunerScreen()),
       GoRoute(
         path: '/editor',
         builder: (context, state) => EditorScreen(song: state.extra as Song?),

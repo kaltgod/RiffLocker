@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../config/theme.dart';
+import '../../common/providers/locale_provider.dart';
 
-class AuthScreen extends StatefulWidget {
+class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
 
   @override
-  State<AuthScreen> createState() => _AuthScreenState();
+  ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -44,7 +46,7 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Unexpected error: $e'),
+            content: Text('${context.tr('unexpected_error', ref)}: $e'),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -65,7 +67,7 @@ class _AuthScreenState extends State<AuthScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created! Sign in now.')),
+          SnackBar(content: Text(context.tr('account_created', ref))),
         );
         setState(() => _isSignUp = false);
       }
@@ -79,25 +81,10 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Unexpected error: $e'),
+            content: Text('${context.tr('unexpected_error', ref)}: $e'),
             backgroundColor: AppTheme.error,
           ),
         );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _signInGuest() async {
-    setState(() => _isLoading = true);
-    try {
-      await Supabase.instance.client.auth.signInAnonymously();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Guest login failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -118,7 +105,7 @@ class _AuthScreenState extends State<AuthScreen> {
               Icon(Icons.lock_open, size: 64, color: AppTheme.primary),
               const SizedBox(height: 16),
               Text(
-                'RiffLocker',
+                context.tr('app_title', ref),
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
@@ -127,7 +114,9 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                _isSignUp ? 'Create Account' : 'Welcome Back',
+                _isSignUp
+                    ? context.tr('create_account', ref)
+                    : context.tr('welcome_back', ref),
                 textAlign: TextAlign.center,
                 style: Theme.of(
                   context,
@@ -143,13 +132,15 @@ class _AuthScreenState extends State<AuthScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined),
+                      decoration: InputDecoration(
+                        labelText: context.tr('email', ref),
+                        prefixIcon: const Icon(Icons.email_outlined),
                       ),
                       validator: (val) {
-                        if (val == null || val.isEmpty) return 'Required';
-                        if (!val.contains('@')) return 'Invalid email';
+                        if (val == null || val.isEmpty)
+                          return context.tr('required_field', ref);
+                        if (!val.contains('@'))
+                          return context.tr('invalid_email', ref);
                         return null;
                       },
                     ),
@@ -157,13 +148,15 @@ class _AuthScreenState extends State<AuthScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outline),
+                      decoration: InputDecoration(
+                        labelText: context.tr('password', ref),
+                        prefixIcon: const Icon(Icons.lock_outline),
                       ),
                       validator: (val) {
-                        if (val == null || val.isEmpty) return 'Required';
-                        if (val.length < 6) return 'Mini 6 chars';
+                        if (val == null || val.isEmpty)
+                          return context.tr('required_field', ref);
+                        if (val.length < 6)
+                          return context.tr('password_min_length', ref);
                         return null;
                       },
                     ),
@@ -189,7 +182,11 @@ class _AuthScreenState extends State<AuthScreen> {
                           color: Colors.black,
                         ),
                       )
-                    : Text(_isSignUp ? 'Sign Up' : 'Sign In'),
+                    : Text(
+                        _isSignUp
+                            ? context.tr('sign_up', ref)
+                            : context.tr('sign_in', ref),
+                      ),
               ),
 
               const SizedBox(height: 16),
@@ -199,21 +196,8 @@ class _AuthScreenState extends State<AuthScreen> {
                 onPressed: () => setState(() => _isSignUp = !_isSignUp),
                 child: Text(
                   _isSignUp
-                      ? 'Already have an account? Sign In'
-                      : 'Don\'t have an account? Sign Up',
-                ),
-              ),
-
-              const Divider(height: 48, color: Colors.white24),
-
-              // Guest Button
-              OutlinedButton.icon(
-                onPressed: _isLoading ? null : _signInGuest,
-                icon: const Icon(Icons.person_outline),
-                label: const Text('Continue as Guest'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  side: const BorderSide(color: Colors.white24),
+                      ? context.tr('already_have_account', ref)
+                      : context.tr('dont_have_account', ref),
                 ),
               ),
             ],

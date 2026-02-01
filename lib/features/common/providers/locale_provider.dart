@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:ui'; // For PlatformDispatcher
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../auth/providers.dart';
@@ -12,7 +13,16 @@ final localeProvider = NotifierProvider<LocaleNotifier, Locale>(
 class LocaleNotifier extends Notifier<Locale> {
   @override
   Locale build() {
-    // Listen for auth changes to load language preference
+    // 1. Default to system locale
+    Locale initial = const Locale('en');
+    try {
+      final systemLoc = PlatformDispatcher.instance.locale;
+      if (systemLoc.languageCode == 'ru' || systemLoc.languageCode == 'zh') {
+        initial = Locale(systemLoc.languageCode);
+      }
+    } catch (_) {}
+
+    // 2. Listen for auth changes to load language preference
     ref.listen(authStateProvider, (previous, next) {
       final user = next.value?.session?.user;
       if (user != null) {
@@ -25,7 +35,8 @@ class LocaleNotifier extends Notifier<Locale> {
         }
       }
     });
-    return const Locale('en');
+
+    return initial;
   }
 
   Future<void> setLocale(Locale locale) async {
@@ -120,6 +131,31 @@ final translationsProvider = Provider<Map<String, Map<String, String>>>((ref) {
       'required_field': 'Required',
       'password_min_length': 'Min 6 chars',
       'edit_song_tooltip': 'Edit Song',
+      // Auth
+      'invalid_email': 'Invalid email',
+      'account_created': 'Account created! Sign in now.',
+      'guest_login_failed': 'Guest login failed',
+      'unexpected_error': 'Unexpected error',
+      'already_have_account': 'Already have an account? Sign In',
+      'dont_have_account': 'Don\'t have an account? Sign Up',
+      // Tuner
+      'mode_precision': 'Precision',
+      'mode_auto': 'Auto',
+      'listening': 'Listening...',
+      'play_string': 'Play a string...',
+      'too_low': 'Tighten',
+      'too_high': 'Loosen',
+      'perfect': 'Perfect!',
+      // Song Categories
+      'want_to_learn': 'Want to Learn',
+      'learning': 'Learning',
+      'know': 'Know',
+      'no_songs_want_to_learn': 'No songs yet',
+      'no_songs_learning': 'No songs yet',
+      'no_songs_know': 'No songs yet',
+      'add_song_hint': 'Tap + to add a song',
+      'select_category': 'Select Category',
+      'change_category': 'Change Category',
     },
     'ru': {
       'app_title': 'RiffLocker',
@@ -178,6 +214,31 @@ final translationsProvider = Provider<Map<String, Map<String, String>>>((ref) {
       'required_field': 'Обязательно',
       'password_min_length': 'Мин. 6 символов',
       'edit_song_tooltip': 'Редактировать Песню',
+      // Auth
+      'invalid_email': 'Некорректная почта',
+      'account_created': 'Аккаунт создан! Войдите сейчас.',
+      'guest_login_failed': 'Ошибка входа гостя',
+      'unexpected_error': 'Ошибка',
+      'already_have_account': 'Уже есть аккаунт? Войти',
+      'dont_have_account': 'Нет аккаунта? Регистрация',
+      // Tuner
+      'mode_precision': 'Точная',
+      'mode_auto': 'Авто',
+      'listening': 'Слушаю...',
+      'play_string': 'Дерни струну...',
+      'too_low': 'Подтяните',
+      'too_high': 'Ослабьте',
+      'perfect': 'Идеально!',
+      // Song Categories
+      'want_to_learn': 'Хочу выучить',
+      'learning': 'Учу',
+      'know': 'Знаю',
+      'no_songs_want_to_learn': 'Песен пока нет',
+      'no_songs_learning': 'Песен пока нет',
+      'no_songs_know': 'Песен пока нет',
+      'add_song_hint': 'Нажмите + чтобы добавить',
+      'select_category': 'Выберите категорию',
+      'change_category': 'Изменить категорию',
     },
     'zh': {
       'app_title': 'RiffLocker',
@@ -232,6 +293,31 @@ final translationsProvider = Provider<Map<String, Map<String, String>>>((ref) {
       'required_field': '必填',
       'password_min_length': '最少6个字符',
       'edit_song_tooltip': '编辑歌曲',
+      // Auth
+      'invalid_email': '无效的电子邮件',
+      'account_created': '帐户已创建！ 现在登录。',
+      'guest_login_failed': '访客登录失败',
+      'unexpected_error': '意外错误',
+      'already_have_account': '已经有帐户？ 登录',
+      'dont_have_account': '没有帐户？ 注册',
+      // Tuner
+      'mode_precision': '精确',
+      'mode_auto': '汽车',
+      'listening': '听...',
+      'play_string': '弹奏琴弦...',
+      'too_low': '调紧',
+      'too_high': '放松',
+      'perfect': '完美！',
+      // Song Categories
+      'want_to_learn': '想学',
+      'learning': '正在学',
+      'know': '已掌握',
+      'no_songs_want_to_learn': '暂无歌曲',
+      'no_songs_learning': '暂无歌曲',
+      'no_songs_know': '暂无歌曲',
+      'add_song_hint': '点击 + 添加歌曲',
+      'select_category': '选择类别',
+      'change_category': '更改类别',
     },
   };
 });

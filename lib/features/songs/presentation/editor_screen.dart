@@ -290,42 +290,36 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Toolbar
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
+                    // Chord Toolbar
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _ToolbarButton(
+                          label: '[ ]',
+                          onTap: () => _insertText('[]'),
+                        ),
+                        for (final chord in const [
+                          'Am',
+                          'A',
+                          'D',
+                          'Dm',
+                          'E',
+                          'Em',
+                          'C',
+                          'G',
+                          'F',
+                          'Cm',
+                          'Gm',
+                          'Fm',
+                          'B',
+                          'Bm',
+                        ])
                           _ToolbarButton(
-                            label: '[ ]',
-                            onTap: () => _insertText('[]'),
+                            label: '[$chord]',
+                            onTap: () => _insertText('[$chord]'),
                           ),
-                          const SizedBox(width: 8),
-                          _ToolbarButton(
-                            label: '[Am]',
-                            onTap: () => _insertText('[Am]'),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolbarButton(
-                            label: '[C]',
-                            onTap: () => _insertText('[C]'),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolbarButton(
-                            label: '[G]',
-                            onTap: () => _insertText('[G]'),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolbarButton(
-                            label: '[Em]',
-                            onTap: () => _insertText('[Em]'),
-                          ),
-                          const SizedBox(width: 8),
-                          _ToolbarButton(
-                            label: '[D]',
-                            onTap: () => _insertText('[D]'),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
                     const SizedBox(height: 8),
 

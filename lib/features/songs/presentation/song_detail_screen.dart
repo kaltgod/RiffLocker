@@ -20,9 +20,13 @@ class SongDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
+  int _transpose = 0;
+  late SongCategory _currentCategory;
+
   @override
   void initState() {
     super.initState();
+    _currentCategory = widget.song.category;
     // Keep screen on while viewing a song
     WakelockPlus.enable();
   }
@@ -76,6 +80,63 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
           SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
         );
       }
+    }
+  }
+
+  Future<void> _showCategoryDialog() async {
+    final selected = await showDialog<SongCategory>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(context.tr('change_category', ref)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: SongCategory.values.map((cat) {
+            final label = _getCategoryLabel(cat);
+            return RadioListTile<SongCategory>(
+              title: Text(label),
+              value: cat,
+              groupValue: _currentCategory,
+              onChanged: (value) => Navigator.pop(context, value),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+
+    if (selected != null && selected != _currentCategory) {
+      try {
+        await ref
+            .read(songRepositoryProvider)
+            .updateSongCategory(widget.song.id, selected);
+        setState(() => _currentCategory = selected);
+        // ignore: unused_result
+        ref.refresh(songsProvider);
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(_getCategoryLabel(selected))));
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  String _getCategoryLabel(SongCategory cat) {
+    switch (cat) {
+      case SongCategory.wantToLearn:
+        return context.tr('want_to_learn', ref);
+      case SongCategory.learning:
+        return context.tr('learning', ref);
+      case SongCategory.know:
+        return context.tr('know', ref);
     }
   }
 
@@ -133,6 +194,7 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
                   Wrap(
                     spacing: 16,
                     runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       if (widget.song.key.isNotEmpty)
                         _MetaChip(
@@ -145,12 +207,30 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
                           icon: Icons.waves,
                           label: '${widget.song.strummingPattern!['pattern']}',
                         ),
+
+                      _TransposeControls(
+                        value: _transpose,
+                        onChanged: (value) =>
+                            setState(() => _transpose = value),
+                      ),
+
+                      // Category chip (clickable to change)
+                      GestureDetector(
+                        onTap: _showCategoryDialog,
+                        child: _MetaChip(
+                          icon: Icons.folder_outlined,
+                          label: _getCategoryLabel(_currentCategory),
+                        ),
+                      ),
                     ],
                   ),
                   const Divider(height: 32),
 
                   // Lyrics & Chords
-                  ChordLyricsRenderer(content: widget.song.content),
+                  ChordLyricsRenderer(
+                    content: widget.song.content,
+                    transpose: _transpose,
+                  ),
 
                   // Bottom padding for scrolling
                   const SizedBox(height: 100),
@@ -162,6 +242,63 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen> {
           // Sticky Player Bar
           if (widget.song.audioUrl != null)
             AudioPlayerBar(audioUrl: widget.song.audioUrl!),
+        ],
+      ),
+    );
+  }
+}
+
+/// Widget for transpose controls (+/-)
+class _TransposeControls extends StatelessWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  const _TransposeControls({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Minus button
+          InkWell(
+            onTap: () => onChanged(value - 1),
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.remove, size: 18, color: AppTheme.secondary),
+            ),
+          ),
+
+          // Value display
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              value == 0 ? '0' : (value > 0 ? '+$value' : '$value'),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: value == 0 ? Colors.grey : AppTheme.primary,
+              ),
+            ),
+          ),
+
+          // Plus button
+          InkWell(
+            onTap: () => onChanged(value + 1),
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.add, size: 18, color: AppTheme.secondary),
+            ),
+          ),
         ],
       ),
     );

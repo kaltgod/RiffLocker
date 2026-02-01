@@ -53,13 +53,11 @@ class MainDrawer extends ConsumerWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.tune, color: Colors.grey),
+            leading: const Icon(Icons.tune, color: AppTheme.primary),
             title: Text(context.tr('tune_guitar', ref)),
             onTap: () {
               context.pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Tuner coming soon!')),
-              );
+              context.push('/tuner');
             },
           ),
 
@@ -68,7 +66,7 @@ class MainDrawer extends ConsumerWidget {
 
           // Account Link
           ListTile(
-            leading: const Icon(Icons.person, color: Colors.white70),
+            leading: const Icon(Icons.person, color: AppTheme.primary),
             title: Text(context.tr('account', ref)),
             onTap: () {
               context.pop();
