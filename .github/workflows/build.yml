@@ -27,17 +27,19 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Enable Desktop and Fix Project
+      - name: Setup Project and Desktop
         run: |
           flutter config --enable-windows-desktop
+          flutter create --platforms=windows,android,ios .
           flutter pub get
+        shell: bash
 
       # Сборка Android
       - name: Build Android
         if: matrix.platform == 'android'
         run: flutter build apk --release
 
-      # Сборка iOS и конвертация в .ipa для Sideloadly
+      # Сборка iOS (IPA для Sideloadly)
       - name: Build iOS
         if: matrix.platform == 'ios'
         run: |
@@ -45,9 +47,9 @@ jobs:
           mkdir Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
           zip -r app-release.ipa Payload
-          rm -rf Payload
+        shell: bash
 
-      # Сборка Windows
+      # Сборка Windows с проверкой ошибок
       - name: Build Windows
         if: matrix.platform == 'windows'
         run: |
