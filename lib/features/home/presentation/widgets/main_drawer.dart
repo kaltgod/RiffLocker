@@ -89,7 +89,7 @@ class MainDrawer extends ConsumerWidget {
                         label: context.tr('my_songs', ref),
                         onTap: () {
                           context.pop();
-                          context.go('/');
+                          context.push('/');
                         },
                       ),
                       _PremiumMenuItem(
