@@ -15,7 +15,9 @@ class TunerScreen extends ConsumerStatefulWidget {
 }
 
 class _TunerScreenState extends ConsumerState<TunerScreen> {
-  final TunerService _tunerService = TunerService();
+  TunerService? _tunerService;
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -24,21 +26,30 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
   }
 
   Future<void> _initTuner() async {
-    await _tunerService.init();
     try {
-      await _tunerService.start();
-    } catch (e) {
+      _tunerService = TunerService();
+      await _tunerService!.init();
+      await _tunerService!.start();
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error starting tuner: $e')));
+        setState(() {
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Tuner init error: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
       }
     }
   }
 
   @override
   void dispose() {
-    _tunerService.dispose();
+    _tunerService?.dispose();
     super.dispose();
   }
 
@@ -80,20 +91,75 @@ class _TunerScreenState extends ConsumerState<TunerScreen> {
             ],
           ),
         ),
-        body: StreamBuilder<TunerResult>(
-          stream: _tunerService.resultStream,
-          initialData: TunerResult.silent(),
-          builder: (context, snapshot) {
-            final result = snapshot.data!;
-            return TabBarView(
-              children: [
-                PrecisionTuner(result: result),
-                AutoTuner(result: result),
-              ],
-            );
-          },
-        ),
+        body: _buildBody(),
       ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primary),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: AppTheme.error, size: 64),
+              const SizedBox(height: 16),
+              Text(
+                'Tuner unavailable',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _errorMessage = null;
+                  });
+                  _initTuner();
+                },
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: Colors.black,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return StreamBuilder<TunerResult>(
+      stream: _tunerService?.resultStream,
+      initialData: TunerResult.silent(),
+      builder: (context, snapshot) {
+        final result = snapshot.data ?? TunerResult.silent();
+        return TabBarView(
+          children: [
+            PrecisionTuner(result: result),
+            AutoTuner(result: result),
+          ],
+        );
+      },
     );
   }
 }
