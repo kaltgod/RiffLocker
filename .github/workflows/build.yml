@@ -1,17 +1,17 @@
 name: Build and Release
 
 on:
-  workflow_dispatch: # Запуск вручную кнопкой
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
-    name: Build for all platforms
+    name: Build for ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false # Если одна ОС упадет, остальные продолжат
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -26,31 +26,43 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-      
-      - name: Install Dependencies
-        run: flutter pub get
 
+      - name: Enable Desktop and Fix Project
+        run: |
+          flutter config --enable-windows-desktop
+          flutter pub get
+
+      # Сборка Android
       - name: Build Android
         if: matrix.platform == 'android'
         run: flutter build apk --release
 
+      # Сборка iOS и конвертация в .ipa для Sideloadly
       - name: Build iOS
         if: matrix.platform == 'ios'
-        run: flutter build ios --release --no-codesign
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir Payload
+          cp -r build/ios/iphoneos/Runner.app Payload/
+          zip -r app-release.ipa Payload
+          rm -rf Payload
 
+      # Сборка Windows
       - name: Build Windows
         if: matrix.platform == 'windows'
-        run: flutter build windows --release
+        run: |
+          flutter build windows --release
+          compress-archive -Path build/windows/runner/Release/* -DestinationPath windows-release.zip
+        shell: pwsh
 
-      # Упаковываем файлы так, чтобы GitHub их точно нашел
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
           path: |
             build/app/outputs/flutter-apk/*.apk
-            build/ios/iphoneos/*.app
-            build/windows/runner/Release/*.exe
+            app-release.ipa
+            windows-release.zip
 
   release:
     needs: build
@@ -58,7 +70,6 @@ jobs:
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
-        
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -66,7 +77,7 @@ jobs:
           name: Build v${{ github.run_number }}
           files: |
             **/*.apk
-            **/*.app
-            **/*.exe
+            **/*.ipa
+            **/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
