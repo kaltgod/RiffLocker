@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -27,6 +28,15 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen>
   late AnimationController _animController;
   late Animation<double> _fadeAnimation;
 
+  // Auto-scroll state
+  final ScrollController _scrollController = ScrollController();
+  bool _isAutoScrolling = false;
+  int _scrollSpeedIndex = 0; // 0=Speed 1 (slowest), 3=Speed 4 (fastest)
+  Timer? _scrollTimer;
+
+  // Speed presets: 1=very slow, 2=slow, 3=medium, 4=fast
+  static const List<double> _scrollSpeeds = [0.15, 0.25, 0.35, 0.5];
+
   @override
   void initState() {
     super.initState();
@@ -46,9 +56,46 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen>
 
   @override
   void dispose() {
+    _stopAutoScroll();
+    _scrollController.dispose();
     _animController.dispose();
     WakelockPlus.disable();
     super.dispose();
+  }
+
+  void _toggleAutoScroll() {
+    if (_isAutoScrolling) {
+      _stopAutoScroll();
+    } else {
+      _startAutoScroll();
+    }
+  }
+
+  void _startAutoScroll() {
+    setState(() => _isAutoScrolling = true);
+    _scrollTimer = Timer.periodic(const Duration(milliseconds: 16), (_) {
+      if (!_scrollController.hasClients) return;
+
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final currentScroll = _scrollController.offset;
+
+      if (currentScroll >= maxScroll) {
+        _stopAutoScroll();
+        return;
+      }
+
+      _scrollController.jumpTo(
+        currentScroll + _scrollSpeeds[_scrollSpeedIndex],
+      );
+    });
+  }
+
+  void _stopAutoScroll() {
+    _scrollTimer?.cancel();
+    _scrollTimer = null;
+    if (mounted) {
+      setState(() => _isAutoScrolling = false);
+    }
   }
 
   Future<void> _deleteSong() async {
@@ -176,6 +223,14 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen>
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         actions: [
+          // Auto-scroll button with speed menu
+          _AutoScrollAppBarButton(
+            isScrolling: _isAutoScrolling,
+            speedIndex: _scrollSpeedIndex,
+            onToggle: _toggleAutoScroll,
+            onSpeedChanged: (index) =>
+                setState(() => _scrollSpeedIndex = index),
+          ),
           if (isOwner) ...[
             if (widget.song.originalSongId == null)
               _AnimatedIconButton(
@@ -193,102 +248,262 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen>
           ],
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Artist name
-                    Text(
-                      widget.song.artist,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(
-                            color: AppTheme.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Meta chips
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+          Column(
+            children: [
+              Expanded(
+                child: FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (widget.song.key.isNotEmpty)
-                          _PremiumChip(
-                            label:
-                                '${context.tr('key', ref)}: ${widget.song.key}',
-                          ),
+                        // Artist name
+                        Text(
+                          widget.song.artist,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(height: 16),
 
-                        if (widget.song.strummingPattern != null)
-                          _PremiumChip(
-                            icon: Icons.waves_rounded,
-                            label:
-                                '${widget.song.strummingPattern!['pattern']}',
-                          ),
+                        // Meta chips
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (widget.song.key.isNotEmpty)
+                              _PremiumChip(
+                                label:
+                                    '${context.tr('key', ref)}: ${widget.song.key}',
+                              ),
 
-                        _PremiumTransposeControls(
-                          value: _transpose,
-                          onChanged: (value) =>
-                              setState(() => _transpose = value),
+                            if (widget.song.strummingPattern != null)
+                              _PremiumChip(
+                                icon: Icons.waves_rounded,
+                                label:
+                                    '${widget.song.strummingPattern!['pattern']}',
+                              ),
+
+                            _PremiumTransposeControls(
+                              value: _transpose,
+                              onChanged: (value) =>
+                                  setState(() => _transpose = value),
+                            ),
+
+                            GestureDetector(
+                              onTap: _showCategoryDialog,
+                              child: _PremiumChip(
+                                icon: Icons.folder_outlined,
+                                label: _getCategoryLabel(_currentCategory),
+                                showArrow: true,
+                              ),
+                            ),
+                          ],
                         ),
 
-                        GestureDetector(
-                          onTap: _showCategoryDialog,
-                          child: _PremiumChip(
-                            icon: Icons.folder_outlined,
-                            label: _getCategoryLabel(_currentCategory),
-                            showArrow: true,
+                        // Premium gradient divider
+                        Container(
+                          height: 1,
+                          margin: const EdgeInsets.symmetric(vertical: 24),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.transparent,
+                                Colors.white.withOpacity(0.15),
+                                Colors.transparent,
+                              ],
+                            ),
                           ),
                         ),
+
+                        // Lyrics & Chords
+                        ChordLyricsRenderer(
+                          content: widget.song.content,
+                          transpose: _transpose,
+                        ),
+
+                        // Chord diagrams section
+                        ChordDiagramsSection(
+                          content: widget.song.content,
+                          transpose: _transpose,
+                        ),
+
+                        const SizedBox(height: 100),
                       ],
                     ),
+                  ),
+                ),
+              ),
 
-                    // Premium gradient divider
-                    Container(
-                      height: 1,
-                      margin: const EdgeInsets.symmetric(vertical: 24),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.transparent,
-                            Colors.white.withOpacity(0.15),
-                            Colors.transparent,
-                          ],
+              // Sticky Player Bar
+              if (widget.song.audioUrl != null)
+                AudioPlayerBar(audioUrl: widget.song.audioUrl!),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Auto-scroll button for AppBar with speed selection popup
+class _AutoScrollAppBarButton extends StatefulWidget {
+  final bool isScrolling;
+  final int speedIndex;
+  final VoidCallback onToggle;
+  final ValueChanged<int> onSpeedChanged;
+
+  const _AutoScrollAppBarButton({
+    required this.isScrolling,
+    required this.speedIndex,
+    required this.onToggle,
+    required this.onSpeedChanged,
+  });
+
+  @override
+  State<_AutoScrollAppBarButton> createState() =>
+      _AutoScrollAppBarButtonState();
+}
+
+class _AutoScrollAppBarButtonState extends State<_AutoScrollAppBarButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_AutoScrollAppBarButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isScrolling && !oldWidget.isScrolling) {
+      _pulseController.repeat(reverse: true);
+    } else if (!widget.isScrolling && oldWidget.isScrolling) {
+      _pulseController.stop();
+      _pulseController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Play/Pause button
+        AnimatedBuilder(
+          animation: _pulseController,
+          builder: (context, child) {
+            return IconButton(
+              icon: AnimatedContainer(
+                duration: AppTheme.animFast,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.isScrolling
+                      ? AppTheme.primary.withOpacity(
+                          0.2 + _pulseController.value * 0.1,
+                        )
+                      : Colors.transparent,
+                  border: widget.isScrolling
+                      ? Border.all(color: AppTheme.primary.withOpacity(0.5))
+                      : null,
+                ),
+                child: Icon(
+                  widget.isScrolling
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  color: widget.isScrolling ? AppTheme.primary : Colors.white,
+                ),
+              ),
+              onPressed: widget.onToggle,
+              tooltip: widget.isScrolling ? 'Stop scroll' : 'Auto scroll',
+            );
+          },
+        ),
+        // Speed selector popup
+        PopupMenuButton<int>(
+          icon: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceLight,
+              borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+              border: Border.all(color: Colors.white.withOpacity(0.1)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${widget.speedIndex + 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.secondary,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 16,
+                  color: Colors.white.withOpacity(0.5),
+                ),
+              ],
+            ),
+          ),
+          tooltip: 'Scroll speed',
+          color: AppTheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+          ),
+          itemBuilder: (context) => List.generate(4, (index) {
+            final isSelected = index == widget.speedIndex;
+            return PopupMenuItem<int>(
+              value: index,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Speed ${index + 1}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? AppTheme.primary : Colors.white,
                         ),
                       ),
                     ),
-
-                    // Lyrics & Chords
-                    ChordLyricsRenderer(
-                      content: widget.song.content,
-                      transpose: _transpose,
-                    ),
-
-                    // Chord diagrams section
-                    ChordDiagramsSection(
-                      content: widget.song.content,
-                      transpose: _transpose,
-                    ),
-
-                    const SizedBox(height: 100),
+                    if (isSelected)
+                      Icon(
+                        Icons.check_rounded,
+                        color: AppTheme.primary,
+                        size: 18,
+                      ),
                   ],
                 ),
               ),
-            ),
-          ),
-
-          // Sticky Player Bar
-          if (widget.song.audioUrl != null)
-            AudioPlayerBar(audioUrl: widget.song.audioUrl!),
-        ],
-      ),
+            );
+          }),
+          onSelected: widget.onSpeedChanged,
+        ),
+      ],
     );
   }
 }
