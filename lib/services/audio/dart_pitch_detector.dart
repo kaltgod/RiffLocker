@@ -1,112 +1,175 @@
 import 'dart:math';
 
-/// Pure Dart pitch detection using autocorrelation algorithm.
-/// Used as fallback when native FFI is unavailable (e.g., iOS).
+/// Pure Dart pitch detection using YIN algorithm.
+/// Matches the native C++ Aubio YIN implementation as closely as possible.
+/// Reference: "YIN, a fundamental frequency estimator for speech and music"
+/// by A. de Cheveigné and H. Kawahara (2002)
 class DartPitchDetector {
   final int sampleRate;
   final int bufferSize;
 
+  // YIN parameters (matching Aubio defaults)
+  static const double _yinThreshold = 0.15; // Aubio default threshold
+  static const double _confidenceThreshold = 0.6; // Match C++ implementation
+
   // Frequency detection range (guitar: ~70Hz to ~1200Hz)
-  late final int _minPeriod;
-  late final int _maxPeriod;
+  late final int _minTau;
+  late final int _maxTau;
+
+  // Preallocated buffers for YIN algorithm
+  late final List<double> _yinBuffer;
 
   DartPitchDetector({required this.sampleRate, required this.bufferSize}) {
-    // Calculate period range from frequency range
-    _minPeriod = (sampleRate / 1200).floor(); // ~1200 Hz max
-    _maxPeriod = (sampleRate / 70).floor(); // ~70 Hz min
+    // Calculate tau range from frequency range
+    // tau = sampleRate / frequency
+    _minTau = (sampleRate / 1200).floor(); // ~1200 Hz max
+    _maxTau = (sampleRate / 70).floor(); // ~70 Hz min
+
+    // YIN buffer size is half the window size
+    // Window size = bufferSize (we use the input buffer directly)
+    _yinBuffer = List.filled(bufferSize ~/ 2, 0.0);
   }
 
   /// Process audio buffer and return detected frequency in Hz.
-  /// Returns 0.0 if no pitch detected or signal too weak.
+  /// Returns 0.0 if no pitch detected or confidence too low.
   double processBlock(List<double> samples) {
-    if (samples.length < _maxPeriod * 2) {
-      return 0.0; // Not enough samples
+    if (samples.length < bufferSize) {
+      return 0.0;
     }
 
-    // 1. Calculate RMS to check if signal is strong enough
-    double sumSquare = 0;
-    for (var s in samples) {
-      sumSquare += s * s;
-    }
-    double rms = sqrt(sumSquare / samples.length);
+    // Step 1: Calculate difference function
+    _differenceFunction(samples);
 
-    if (rms < 0.01) {
-      return 0.0; // Signal too weak
-    }
+    // Step 2: Cumulative mean normalized difference function
+    _cumulativeMeanNormalizedDifference();
 
-    // 2. Normalize samples
-    List<double> normalized = samples.map((s) => s / rms).toList();
+    // Step 3: Absolute threshold
+    int tau = _absoluteThreshold();
 
-    // 3. Autocorrelation with peak detection
-    double bestCorrelation = 0;
-    int bestPeriod = 0;
-
-    for (
-      int period = _minPeriod;
-      period <= _maxPeriod && period < normalized.length ~/ 2;
-      period++
-    ) {
-      double correlation = _autocorrelate(normalized, period);
-
-      if (correlation > bestCorrelation) {
-        bestCorrelation = correlation;
-        bestPeriod = period;
-      }
+    if (tau == -1) {
+      return 0.0; // No pitch detected
     }
 
-    // 4. Check if correlation is strong enough
-    if (bestCorrelation < 0.8 || bestPeriod == 0) {
-      return 0.0; // No clear pitch detected
+    // Step 4: Parabolic interpolation for better accuracy
+    double betterTau = _parabolicInterpolation(tau);
+
+    // Step 5: Calculate confidence
+    double confidence = 1.0 - _yinBuffer[tau];
+
+    // Match C++ confidence threshold
+    if (confidence < _confidenceThreshold) {
+      return 0.0;
     }
 
-    // 5. Parabolic interpolation for sub-sample accuracy
-    double refinedPeriod = _parabolicInterpolation(normalized, bestPeriod);
+    // Convert tau to frequency
+    double frequency = sampleRate / betterTau;
 
-    // 6. Convert period to frequency
-    double frequency = sampleRate / refinedPeriod;
+    // Sanity check frequency range
+    if (frequency < 70 || frequency > 1200) {
+      return 0.0;
+    }
 
     return frequency;
   }
 
-  /// Calculate normalized autocorrelation at given lag
-  double _autocorrelate(List<double> samples, int lag) {
-    double sum = 0;
-    double sumA = 0;
-    double sumB = 0;
+  /// Step 1: Difference function d(τ)
+  /// d(τ) = Σ (x[j] - x[j+τ])²
+  void _differenceFunction(List<double> samples) {
+    int halfLen = _yinBuffer.length;
 
-    int n = samples.length - lag;
+    for (int tau = 0; tau < halfLen; tau++) {
+      double sum = 0.0;
 
-    for (int i = 0; i < n; i++) {
-      double a = samples[i];
-      double b = samples[i + lag];
-      sum += a * b;
-      sumA += a * a;
-      sumB += b * b;
+      for (int j = 0; j < halfLen; j++) {
+        double diff = samples[j] - samples[j + tau];
+        sum += diff * diff;
+      }
+
+      _yinBuffer[tau] = sum;
     }
-
-    double denominator = sqrt(sumA * sumB);
-    if (denominator < 0.0001) return 0;
-
-    return sum / denominator;
   }
 
-  /// Parabolic interpolation for better accuracy
-  double _parabolicInterpolation(List<double> samples, int period) {
-    if (period <= _minPeriod || period >= _maxPeriod - 1) {
-      return period.toDouble();
+  /// Step 2: Cumulative mean normalized difference function d'(τ)
+  /// d'(τ) = d(τ) / [(1/τ) * Σ d(k)] for τ > 0
+  /// d'(0) = 1
+  void _cumulativeMeanNormalizedDifference() {
+    _yinBuffer[0] = 1.0;
+
+    double runningSum = 0.0;
+
+    for (int tau = 1; tau < _yinBuffer.length; tau++) {
+      runningSum += _yinBuffer[tau];
+
+      if (runningSum > 0) {
+        _yinBuffer[tau] = _yinBuffer[tau] * tau / runningSum;
+      } else {
+        _yinBuffer[tau] = 1.0;
+      }
+    }
+  }
+
+  /// Step 3: Absolute threshold
+  /// Find the smallest τ where d'(τ) < threshold
+  int _absoluteThreshold() {
+    int tauEstimate = -1;
+
+    // Start from minTau to avoid very high frequencies
+    for (
+      int tau = max(_minTau, 2);
+      tau < min(_maxTau, _yinBuffer.length);
+      tau++
+    ) {
+      if (_yinBuffer[tau] < _yinThreshold) {
+        // Find the local minimum
+        while (tau + 1 < _yinBuffer.length &&
+            _yinBuffer[tau + 1] < _yinBuffer[tau]) {
+          tau++;
+        }
+        tauEstimate = tau;
+        break;
+      }
     }
 
-    double y0 = _autocorrelate(samples, period - 1);
-    double y1 = _autocorrelate(samples, period);
-    double y2 = _autocorrelate(samples, period + 1);
+    // If no value below threshold found, search for global minimum
+    if (tauEstimate == -1) {
+      double minVal = double.infinity;
+      for (
+        int tau = max(_minTau, 2);
+        tau < min(_maxTau, _yinBuffer.length);
+        tau++
+      ) {
+        if (_yinBuffer[tau] < minVal) {
+          minVal = _yinBuffer[tau];
+          tauEstimate = tau;
+        }
+      }
 
-    double denominator = 2 * (2 * y1 - y0 - y2);
-    if (denominator.abs() < 0.0001) {
-      return period.toDouble();
+      // Only accept if reasonably low
+      if (minVal > 0.5) {
+        return -1;
+      }
     }
 
-    double delta = (y0 - y2) / denominator;
+    return tauEstimate;
+  }
 
-    return period + delta;
+  /// Step 4: Parabolic interpolation for sub-sample accuracy
+  double _parabolicInterpolation(int tau) {
+    if (tau < 1 || tau >= _yinBuffer.length - 1) {
+      return tau.toDouble();
+    }
+
+    double s0 = _yinBuffer[tau - 1];
+    double s1 = _yinBuffer[tau];
+    double s2 = _yinBuffer[tau + 1];
+
+    // Parabolic interpolation formula
+    double adjustment = (s2 - s0) / (2 * (2 * s1 - s0 - s2));
+
+    if (adjustment.isNaN || adjustment.isInfinite) {
+      return tau.toDouble();
+    }
+
+    return tau + adjustment;
   }
 }
