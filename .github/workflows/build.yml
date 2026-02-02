@@ -1,9 +1,9 @@
 name: Build and Release
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch: # Запуск вручную кнопкой
 
-permissions: 
+permissions:
   contents: write
 
 jobs:
@@ -11,6 +11,7 @@ jobs:
     name: Build for all platforms
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false # Если одна ОС упадет, остальные продолжат
       matrix:
         include:
           - os: ubuntu-latest
@@ -35,34 +36,21 @@ jobs:
 
       - name: Build iOS
         if: matrix.platform == 'ios'
-        run: flutter build ios --release --no-codesign 
+        run: flutter build ios --release --no-codesign
 
       - name: Build Windows
         if: matrix.platform == 'windows'
         run: flutter build windows --release
 
-      - name: Archive Windows
-        if: matrix.platform == 'windows'
-        shell: bash
-        run: |
-          cd build/windows/runner/Release/
-          tar -a -c -f ../../../../windows-release.zip *
-
-      - name: Archive iOS
-        if: matrix.platform == 'ios'
-        shell: bash
-        run: |
-          cd build/ios/iphoneos/
-          zip -r ../../../ios-release.zip Runner.app
-
+      # Упаковываем файлы так, чтобы GitHub их точно нашел
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
           path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            ios-release.zip
-            windows-release.zip
+            build/app/outputs/flutter-apk/*.apk
+            build/ios/iphoneos/*.app
+            build/windows/runner/Release/*.exe
 
   release:
     needs: build
@@ -77,6 +65,8 @@ jobs:
           tag_name: v${{ github.run_number }}
           name: Build v${{ github.run_number }}
           files: |
-            **/app-release.apk
-            **/ios-release.zip
-            **/windows-release.zip
+            **/*.apk
+            **/*.app
+            **/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
