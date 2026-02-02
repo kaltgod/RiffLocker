@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_audio_capture/flutter_audio_capture.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'ffi_bridge.dart';
+import 'dart_pitch_detector.dart';
 
 class TunerResult {
   final double frequency;
@@ -25,7 +27,11 @@ class TunerResult {
 
 class TunerService {
   final FlutterAudioCapture _audioCapture = FlutterAudioCapture();
-  final NativeAudioAnalyzer _analyzer = NativeAudioAnalyzer();
+
+  // Native analyzer (Android/Windows) or Dart fallback (iOS)
+  NativeAudioAnalyzer? _nativeAnalyzer;
+  DartPitchDetector? _dartAnalyzer;
+  bool _useNative = true;
 
   final StreamController<TunerResult> _resultController =
       StreamController<TunerResult>.broadcast();
@@ -34,22 +40,43 @@ class TunerService {
   bool _isRecording = false;
 
   // Audio configuration
-  // Note: flutter_audio_capture usually gives us what the HW supports,
-  // but we try to ask for standard settings.
   static const int _sampleRate = 44100;
-  static const int _bufferSize =
-      2048; // Analyzer block size (latency vs accuracy trade-off)
+  static const int _bufferSize = 2048;
 
-  // Internal buffer to accumulate samples if the callback gives us small chunks
+  // Internal buffer to accumulate samples
   List<double> _accumulationBuffer = [];
 
   Future<void> init() async {
     // Initialize audio capture plugin
     await _audioCapture.init();
-    try {
-      _analyzer.init(_sampleRate, _bufferSize);
-    } catch (e) {
-      debugPrint("Error initializing NativeAudioAnalyzer: $e");
+
+    // Try native analyzer first, fallback to Dart on iOS
+    if (Platform.isIOS) {
+      // iOS: Use Dart fallback (native lib not compiled)
+      _useNative = false;
+      _dartAnalyzer = DartPitchDetector(
+        sampleRate: _sampleRate,
+        bufferSize: _bufferSize,
+      );
+      debugPrint('TunerService: Using Dart pitch detector (iOS fallback)');
+    } else {
+      // Android/Windows: Use native FFI
+      try {
+        _nativeAnalyzer = NativeAudioAnalyzer();
+        _nativeAnalyzer!.init(_sampleRate, _bufferSize);
+        _useNative = true;
+        debugPrint('TunerService: Using native FFI analyzer');
+      } catch (e) {
+        // Fallback to Dart if native fails
+        debugPrint(
+          'TunerService: Native init failed ($e), using Dart fallback',
+        );
+        _useNative = false;
+        _dartAnalyzer = DartPitchDetector(
+          sampleRate: _sampleRate,
+          bufferSize: _bufferSize,
+        );
+      }
     }
   }
 
@@ -63,13 +90,11 @@ class TunerService {
 
     _accumulationBuffer = [];
 
-    // Start capturing
-    // Note: listener returns Float32 input
     await _audioCapture.start(
       _onAudioCallback,
       _onErrorCallback,
       sampleRate: _sampleRate,
-      bufferSize: _bufferSize, // This is a request not guarantee
+      bufferSize: _bufferSize,
     );
 
     _isRecording = true;
@@ -84,12 +109,11 @@ class TunerService {
 
   void dispose() {
     stop();
-    _analyzer.dispose();
+    _nativeAnalyzer?.dispose();
     _resultController.close();
   }
 
   void _onAudioCallback(dynamic audioData) {
-    // flutter_audio_capture passes Float32List (if handled correctly) or List<double>
     List<double> samples;
     if (audioData is Float32List) {
       samples = audioData;
@@ -100,25 +124,19 @@ class TunerService {
       return;
     }
 
-    // Accumulate samples
     _accumulationBuffer.addAll(samples);
 
-    // Process when we have enough data
     while (_accumulationBuffer.length >= _bufferSize) {
-      // Take a chunk
       var chunk = _accumulationBuffer.sublist(0, _bufferSize);
       _accumulationBuffer = _accumulationBuffer.sublist(_bufferSize);
 
-      // 1. RMS Gate (Software Silence Threshold)
-      // Calculate RMS for this chunk specifically
+      // RMS Gate
       double sumSquare = 0;
       for (var s in chunk) {
         sumSquare += s * s;
       }
       double rms = sqrt(sumSquare / chunk.length);
 
-      // Adjust this value to filter background noise.
-      // 0.001 is roughly -60dB. 0.002 is roughly -54dB.
       const double rmsThreshold = 0.002;
 
       if (rms < rmsThreshold) {
@@ -126,27 +144,29 @@ class TunerService {
         continue;
       }
 
-      // Process via FFI
-      double frequency = _analyzer.processBlock(chunk);
+      // Process via native or Dart
+      double frequency;
+      if (_useNative && _nativeAnalyzer != null) {
+        frequency = _nativeAnalyzer!.processBlock(chunk);
+      } else if (_dartAnalyzer != null) {
+        frequency = _dartAnalyzer!.processBlock(chunk);
+      } else {
+        continue;
+      }
 
-      // 2. Frequency Range Filter (Guitar Specific)
-      // Standard tuning: E2 (82Hz) to E4 (330Hz).
-      // Allow margins: Drop D (73Hz) to 24th fret High E (~1300Hz).
-      // Anything outside this is likely noise/harmonics.
+      // Frequency Range Filter
       if (frequency < 70 || frequency > 1200) {
-        // Ignore out of range frequencies
         _resultController.add(TunerResult.silent());
         continue;
       }
 
-      // 3. Stability Filter
+      // Stability Filter
       _frequencyHistory.add(frequency);
       if (_frequencyHistory.length > 3) {
         _frequencyHistory.removeAt(0);
       }
 
       if (_isSignalStable()) {
-        // Use median or average
         double avgFreq =
             _frequencyHistory.reduce((a, b) => a + b) /
             _frequencyHistory.length;
@@ -157,18 +177,15 @@ class TunerService {
     }
   }
 
-  // History for stability check
   final List<double> _frequencyHistory = [];
 
   bool _isSignalStable() {
     if (_frequencyHistory.length < 3) return false;
-    // ... same logic
     if (_frequencyHistory.any((f) => f <= 0)) return false;
 
     double first = _frequencyHistory.first;
     double last = _frequencyHistory.last;
 
-    // Allow bigger deviation (e.g. 10%) because "attack" phase of a string can go sharp
     double threshold = first * 0.10;
 
     if ((first - last).abs() > threshold) return false;
@@ -180,8 +197,6 @@ class TunerService {
   void _onErrorCallback(Object error, StackTrace? stackTrace) {
     debugPrint("Audio Capture Error: $error");
   }
-
-  // --- Music Theory Util ---
 
   final List<String> _noteNames = [
     "C",
@@ -199,10 +214,8 @@ class TunerService {
   ];
 
   TunerResult _calculatePitch(double frequency) {
-    if (frequency < 20) return TunerResult.silent(); // Filter subsonic
+    if (frequency < 20) return TunerResult.silent();
 
-    // A4 = 440Hz
-    // MIDI Note Number equation: m = 69 + 12 * log2(f / 440)
     double pitchMidi = 69 + 12 * (log(frequency / 440.0) / ln2);
 
     int roundedMidi = pitchMidi.round();
