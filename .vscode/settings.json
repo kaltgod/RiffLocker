@@ -1,3 +1,4 @@
 {
-    "avdmanager.sdkPath": "c:\\Users\\akuvs\\AppData\\Local\\Android\\Sdk"
+    "avdmanager.sdkPath": "c:\\Users\\akuvs\\AppData\\Local\\Android\\Sdk",
+    "cmake.sourceDirectory": "C:/git/app/linux"
 }

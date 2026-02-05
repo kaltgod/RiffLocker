@@ -35,7 +35,12 @@ class _SongDetailScreenState extends ConsumerState<SongDetailScreen>
   Timer? _scrollTimer;
 
   // Speed presets: 1=very slow, 2=slow, 3=medium, 4=fast
-  static const List<double> _scrollSpeeds = [0.15, 0.25, 0.35, 0.5];
+  static const List<double> _scrollSpeeds = [
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+  ]; // 9, 12, 15, 18 px/sec at 60fps
 
   @override
   void initState() {
